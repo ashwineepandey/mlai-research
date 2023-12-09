@@ -73,3 +73,9 @@ def plot_cropped_tifs(cropped_tifs, title):
         ax.set_title(os.path.basename(file), fontsize=8)
         ax.axis('off')
     plt.show()
+
+
+def sync_crs(gdf, rasterimg) -> bool: 
+    if gdf.crs != rasterimg.crs:
+        gdf = gdf.set_crs(str(rasterimg.crs))
+    return gdf

@@ -53,12 +53,7 @@ def filter_relevant_species(df):
     return df
 
 
-def sync_crs(gdf, rasterimg) -> bool: 
-    if gdf.crs != rasterimg.crs:
-        gdf = gdf.set_crs(str(rasterimg.crs))
-    return gdf
-
-
+@utils.timer
 def main():
     conf = utils.load_config("base")
     gdf1, gdf2 = load_shp_data(f"{conf.data.path_raw}classification_points/", conf.data.fn_shp_raw1, conf.data.fn_shp_raw2)
@@ -69,3 +64,8 @@ def main():
         fil_comb_gdf = filter_relevant_species(comb_gdf)
         fil_comb_gdf['pid'] = list(range(len(fil_comb_gdf)))
         fil_comb_gdf.to_file(f"{conf.data.path_base_points}{conf.data.fn_shp_combined}", driver='ESRI Shapefile')
+        logger.info(f"GeoDF saved to {conf.data.path_base_points}{conf.data.fn_shp_combined}")
+
+
+if __name__ == "__main__":
+    main()
