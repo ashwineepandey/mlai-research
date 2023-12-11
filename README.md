@@ -12,18 +12,13 @@ Purpose: Combine differing shape files provided into a combined file with only t
 
 Purpose: 
 
-3. Crop Rasters
-`python crop_rasters.py`
 
-Purpose: 
-
-
-4. Segment cropped rasters
+3. Segment cropped rasters
 `python segment_rasters.py`
 
 Purpose
 
-5. Extract Features
+4. Extract Features
 `python extract_features.py`
 
 Purpose: 

@@ -11,6 +11,7 @@ from shapely.geometry import box, mapping
 import numpy as np
 import matplotlib.pyplot as plt
 import geopandas as gpd
+from PIL import Image
 
 logger = log.get_logger(__name__)
 
@@ -20,8 +21,8 @@ def load_data(conf):
     # 3 bands of Normal Camera image
     # 1 band of Digital Surface Model
     # 1 band of Digital Terrain Model
-    imgs["hyps"] = utils.load_raster(f"{conf.data.path_base_hyps_rs}{conf.data.fn_hyps}")
-    imgs["rgba"] = utils.load_raster(f"{conf.data.path_base_rgba_rs}{conf.data.fn_rgba}")
+    imgs["hyps"] = utils.load_raster(f"{conf.data.path_base_hyps}{conf.data.fn_hyps}")
+    imgs["rgba"] = utils.load_raster(f"{conf.data.path_base_rgba}{conf.data.fn_rgba}")
     imgs["dsm"] = utils.load_raster(f"{conf.data.path_base_dsm}{conf.data.fn_dsm}")
     imgs["dtm"] = utils.load_raster(f"{conf.data.path_base_dtm}{conf.data.fn_dtm}")
     # Load shapefile
@@ -110,6 +111,7 @@ def clip_gdf(gdf, bounds):
 @utils.timer
 def plot_raster(gdf, rasterimg, out_dir=None, fn=None, show=False, save=False):
     fig, ax = plt.subplots(figsize = (20,20))
+    rasterio.plot.show(rasterimg, ax=ax)
     gdf.plot(column='Species',
                    categorical=True,
                    legend=True,
@@ -132,9 +134,30 @@ def process_shp(clipped_gdf, buffer=10):
     return gdf_copy
 
 
-def save_cropped_tifs(path_int_cr, pid, raster_type, label, out_image, out_meta):
-    with rasterio.open(f"{path_int_cr}{pid}_{raster_type}_{label}.tif", "w", **out_meta) as dst:
+def save_as_png(image: np.ndarray, filename: str):
+    """
+    Saves the input image as a PNG file.
+
+    Parameters:
+    - image (numpy.ndarray): The input image.
+    - filename (str): The output filename.
+    """
+    im = Image.fromarray((image * 255).astype(np.uint8))
+    im.save(filename)
+
+
+def save_cropped_tifs(path_int_cr_tif, pid, raster_type, label, out_image, out_meta, rgb=False, path_int_cr_imgs=None):
+    with rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif", "w", **out_meta) as dst:
         dst.write(out_image)
+    
+    if rgb:
+        # Normalize and convert to RGB
+        rgb_data_hwc = convert_to_rgb(out_image)
+        normalized_image = normalize_image(rgb_data_hwc)
+
+        # Save as PNG
+        save_as_png(normalized_image, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
+
 
 def crop_buffer(raster, polygon, path_pri, pid, raster_type, label):
     geojson_polygon = mapping(polygon)
@@ -143,16 +166,48 @@ def crop_buffer(raster, polygon, path_pri, pid, raster_type, label):
     out_meta.update({"height": out_image.shape[1], "width": out_image.shape[2], "transform": out_transform})
     save_cropped_tifs(path_pri, pid, raster_type, label, out_image, out_meta)
 
-
+@utils.timer
 def create_cropped_data(clipped_gdf, conf,
-                     rgb_aligned, ms_aligned, dsm_clipped, dtm_clipped):
+                     rgb, ms_aligned, chm):
     gdf_copy = process_shp(clipped_gdf, buffer=conf.preprocess.crop_buffer)
     for _, row in gdf_copy.iterrows():
-        crop_buffer(rgb_aligned, row.buffer, conf.data.path_int_cr, row.pid, 'rgba', row.Species)
-        crop_buffer(ms_aligned, row.buffer, conf.data.path_int_cr, row.pid, 'hyps', row.Species)
-        crop_buffer(dsm_clipped, row.buffer, conf.data.path_int_cr, row.pid, 'dsm', row.Species)
-        crop_buffer(dtm_clipped, row.buffer, conf.data.path_int_cr, row.pid, 'dtm', row.Species)
-    return gdf_copy
+        crop_buffer(rgb, row.buffer, conf.data.path_int_cr_tif, row.pid, 'rgb', row.Species, rgb=True, path_int_cr_imgs=conf.data.path_int_cr_imgs)
+        crop_buffer(ms_aligned, row.buffer, conf.data.path_int_cr_tif, row.pid, 'hyps', row.Species)
+        crop_buffer(chm, row.buffer, conf.data.path_int_cr_tif, row.pid, 'chm', row.Species)
+
+
+def create_canopy_height_model(name, path_int, dsm, dtm):
+    dsm_data = dsm.read(1)
+    dtm_data = dtm.read(1)
+    chm_data = dsm_data - dtm_data
+    with rasterio.open(f'{path_int}{name}.tif', 'w', **dsm.profile) as dst:
+        dst.write(chm_data, 1)
+    
+    chm = rasterio.open(f'{path_int}{name}.tif')
+    return chm
+
+def normalize_image(image: np.ndarray) -> np.ndarray:
+    """
+    Normalizes the pixel values of the input image.
+
+    Parameters:
+    - image (numpy.ndarray): The input image.
+
+    Returns:
+    - numpy.ndarray: The normalized image.
+    """
+    normalized_image = cv2.normalize(image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    logger.info(f'Normalized image shape: {normalized_image.shape}')
+    return normalized_image
+
+
+def convert_to_rgb(rgba_aligned):
+    # Read the raster bands directly into numpy arrays.
+    rgba_data = rgba_aligned.read()
+    rgb_data = rgba_data[:3, :, :]
+    rgb_data_hwc = np.transpose(rgb_data, (1, 2, 0))
+    return rgb_data_hwc
+
 
 @utils.timer
 def main():
@@ -167,22 +222,29 @@ def main():
     dsm_clipped = clip_raster_to_bounds('dsm', conf.data.path_int_cl, imgs['dsm'], target_bounds)
     dtm_clipped = clip_raster_to_bounds('dtm', conf.data.path_int_cl, imgs['dtm'], target_bounds)
 
-    rgba_aligned = align_rasters('rgba', conf.data.path_int_al, rgba_clipped, dsm_clipped)
-    hyps_aligned = align_rasters('hyps', conf.data.path_int_al, hyps_clipped, dsm_clipped)
+    hyps_aligned = align_rasters('hyps', conf.data.path_int_al, hyps_clipped, rgba_clipped)
+    dsm_aligned = align_rasters('dsm', conf.data.path_int_al, dsm_clipped, rgba_clipped)
+    dtm_aligned = align_rasters('dtm', conf.data.path_int_al, dtm_clipped, rgba_clipped)
 
-    clipped_gdf = clip_gdf(gdf, rgba_aligned.bounds)
+    clipped_gdf = clip_gdf(gdf, rgba_clipped.bounds)
 
-    plot_raster(clipped_gdf, rgba_aligned, 
+    plot_raster(clipped_gdf, rgba_clipped, 
                 out_dir=conf.data.path_rep, fn=conf.data.fn_rgba, show=False, save=True)
     plot_raster(clipped_gdf, hyps_aligned, 
                 out_dir=conf.data.path_rep, fn=conf.data.fn_hyps, show=False, save=True)
-    plot_raster(clipped_gdf, dsm_clipped, 
+    plot_raster(clipped_gdf, dsm_aligned, 
                 out_dir=conf.data.path_rep, fn=conf.data.fn_dsm, show=False, save=True)
-    plot_raster(clipped_gdf, dtm_clipped, 
+    plot_raster(clipped_gdf, dtm_aligned, 
                 out_dir=conf.data.path_rep, fn=conf.data.fn_dtm, show=False, save=True)
 
-    # gdf_copy = create_cropped_data(clipped_gdf, conf,
-    #                  rgba_aligned, hyps_aligned, dsm_clipped, dtm_clipped)
+    chm = create_canopy_height_model('chm', conf.data.path_int_al, dsm_aligned, dtm_aligned)
+
+    rgb_data_hwc = convert_to_rgb(rgba_clipped)
+    rgb = normalize_image(rgb_data_hwc)
+
+    create_cropped_data(clipped_gdf, conf,
+                     rgb, hyps_aligned, chm)
+    
     # # gdf_copy['buffer_wkt'] = gdf_copy['buffer'].to_wkt()
     # gdf_copy = gdf_copy.drop(columns=['geometry'])
     # logger.info(f"{conf.data.path_int_points}{conf.data.fn_shp_combined}")
