@@ -2,6 +2,7 @@ import sys
 sys.path.append('../mlai_research/')
 import log
 import utils
+import cv2
 import rasterio
 import rasterio.plot
 from rasterio.mask import mask
@@ -152,26 +153,26 @@ def save_cropped_tifs(path_int_cr_tif, pid, raster_type, label, out_image, out_m
     
     if rgb:
         # Normalize and convert to RGB
-        rgb_data_hwc = convert_to_rgb(out_image)
+        cropped_raster = rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif")
+        rgb_data_hwc = convert_to_rgb(cropped_raster)
         normalized_image = normalize_image(rgb_data_hwc)
-
         # Save as PNG
         save_as_png(normalized_image, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
 
 
-def crop_buffer(raster, polygon, path_pri, pid, raster_type, label):
+def crop_buffer(raster, polygon, path_pri, pid, raster_type, label, rgb=False, path_int_cr_imgs=None):
     geojson_polygon = mapping(polygon)
     out_image, out_transform = mask(raster, [geojson_polygon], crop=True)
     out_meta = raster.meta.copy()
     out_meta.update({"height": out_image.shape[1], "width": out_image.shape[2], "transform": out_transform})
-    save_cropped_tifs(path_pri, pid, raster_type, label, out_image, out_meta)
+    save_cropped_tifs(path_pri, pid, raster_type, label, out_image, out_meta, rgb, path_int_cr_imgs)
 
 @utils.timer
 def create_cropped_data(clipped_gdf, conf,
                      rgb, ms_aligned, chm):
     gdf_copy = process_shp(clipped_gdf, buffer=conf.preprocess.crop_buffer)
     for _, row in gdf_copy.iterrows():
-        crop_buffer(rgb, row.buffer, conf.data.path_int_cr_tif, row.pid, 'rgb', row.Species, rgb=True, path_int_cr_imgs=conf.data.path_int_cr_imgs)
+        crop_buffer(rgb, row.buffer, conf.data.path_int_cr_tif, row.pid, 'rgb', row.Species, rgb=True, path_int_cr_imgs=conf.data.path_int_cr_img)
         crop_buffer(ms_aligned, row.buffer, conf.data.path_int_cr_tif, row.pid, 'hyps', row.Species)
         crop_buffer(chm, row.buffer, conf.data.path_int_cr_tif, row.pid, 'chm', row.Species)
 
@@ -239,18 +240,8 @@ def main():
 
     chm = create_canopy_height_model('chm', conf.data.path_int_al, dsm_aligned, dtm_aligned)
 
-    rgb_data_hwc = convert_to_rgb(rgba_clipped)
-    rgb = normalize_image(rgb_data_hwc)
-
     create_cropped_data(clipped_gdf, conf,
-                     rgb, hyps_aligned, chm)
-    
-    # # gdf_copy['buffer_wkt'] = gdf_copy['buffer'].to_wkt()
-    # gdf_copy = gdf_copy.drop(columns=['geometry'])
-    # logger.info(f"{conf.data.path_int_points}{conf.data.fn_shp_combined}")
-    # # gdf_copy.to_parquet(f"{conf.data.path_int_points}{conf.data.fn_shp_combined}")
-    # gdf_copy.to_file(f"{conf.data.path_int_points}{conf.data.fn_shp_combined}", 
-    #                  driver='ESRI Shapefile')#, geometry='geometry')
+                     rgba_clipped, hyps_aligned, chm)
 
 
 if __name__ == "__main__":
