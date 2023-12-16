@@ -52,8 +52,15 @@ def load_raster(path):
     return img
 
 
-def get_filenames(path, ext):
-    return glob.glob(f'{path}*.{ext}')
+def get_filenames(path, ext, keyword=None):
+    pattern = f'{path}*.{ext}'
+    file_paths = glob.glob(pattern)
+    
+    if keyword:
+        filtered_paths = [file_path for file_path in file_paths if keyword in file_path]
+        return filtered_paths
+    else:
+        return file_paths
 
 
 def plot_cropped_tifs(cropped_tifs, title):

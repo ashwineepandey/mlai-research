@@ -10,21 +10,23 @@ Purpose: Combine differing shape files provided into a combined file with only t
 2. Pre-process rasters
 `python preprocess_rasters.py`
 
-Purpose: 
-
+Purpose: This script is used to load and preprocess the raster images. It includes loading RGB, grayscale, and hyperspectral images, applying masks to the images, and saving the masked images to disk.
 
 3. Segment cropped rasters
-`python segment_rasters.py`
+`python segment.py`
 
-Purpose
+Purpose: This script is used to segment the cropped raster images. It includes applying segmentation algorithms to the images and saving the segmented images to disk.
 
 4. Extract Features
 `python extract_features.py`
 
-Purpose: 
+Purpose: This script is used to extract features from the segmented images. It includes calculating various features for each segment and saving the features to a file.
 
 5. Prepare Modelling Data
 `python prep_model_data.py`
+
+Purpose: This script is used to prepare the data for modeling. It includes loading the features, splitting the data into training and test sets, and saving the prepared data to disk.
+
 
 Purpose: 
 

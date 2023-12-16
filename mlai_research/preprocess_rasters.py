@@ -147,45 +147,134 @@ def save_as_png(image: np.ndarray, filename: str):
     im.save(filename)
 
 
-def save_cropped_tifs(path_int_cr_tif, pid, raster_type, label, out_image, out_meta, rgb=False, path_int_cr_imgs=None):
+def save_crop(path_int_cr_tif, pid, raster_type, label, out_image, out_meta):
+    resized_img = np.resize(out_image, (out_image.shape[0], 87, 87))
+
+    # Update the metadata with the new dimensions
+    out_meta.update({"height": 87, "width": 87})
+
+    # Save the resized raster data
+    with rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif", "w", **out_meta) as dst:
+        dst.write(resized_img)
+
+
+def save_crop_rgb(path_int_cr_tif, pid, raster_type, label, out_image, out_meta, path_int_cr_imgs):
     with rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif", "w", **out_meta) as dst:
         dst.write(out_image)
     
-    if rgb:
-        # Normalize and convert to RGB
-        cropped_raster = rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif")
-        rgb_data_hwc = convert_to_rgb(cropped_raster)
-        normalized_image = normalize_image(rgb_data_hwc)
-        # Save as PNG
-        save_as_png(normalized_image, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
+    # Normalize and convert to RGB
+    cropped_raster = rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif")
+    rgb_data_hwc = convert_to_rgb(cropped_raster)
+    normalized_image = normalize_image(rgb_data_hwc)
+    resized_img = crop_image(normalized_image, (87, 87))
+    # Save as PNG
+    logger.info(f'Resized image shape: {resized_img.shape}')
+    save_as_png(resized_img, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
 
 
-def crop_buffer(raster, polygon, path_pri, pid, raster_type, label, rgb=False, path_int_cr_imgs=None):
+def crop_image(image: np.ndarray, new_shape: tuple) -> np.ndarray:
+    """
+    Crops the input image to the specified shape.
+
+    Parameters:
+    - image (numpy.ndarray): The input image.
+    - new_shape (tuple): The desired shape.
+
+    Returns:
+    - numpy.ndarray: The cropped image.
+    """
+    # Ensure the new shape is smaller than the current shape
+    # assert all(new <= curr for new, curr in zip(new_shape, image.shape)), "New shape must be smaller than current shape"
+
+    # add condition to check if new_shape is smaller than image.shape
+    if new_shape[0] < image.shape[0] or new_shape[1] < image.shape[1]:
+        # Slice the image to the new shape
+        cropped_image = cv2.resize(image, new_shape)
+        return cropped_image
+    else:
+        return image
+
+def equalize_histogram(image: np.ndarray) -> np.ndarray:
+    """
+    Equalizes the histogram of the input image.
+
+    Parameters:
+    - image (numpy.ndarray): The input image.
+
+    Returns:
+    - numpy.ndarray: The image with equalized histogram.
+    """
+    # Normalize the image to 0-1 range
+    # image_norm = (image - np.min(image)) / (np.max(image) - np.min(image))
+
+    # # Convert the normalized image to 8-bit
+    # image_8bit = np.uint8(image_norm * 255)
+
+    image_8bit = normalize_image(image)
+
+    # Flatten the image into 1D array
+    image_flattened = image_8bit.flatten()
+
+    # Perform histogram equalization
+    equalized_image = cv2.equalizeHist(image_flattened)
+
+    # Reshape the equalized image back to the original shape
+    equalized_image = equalized_image.reshape(image.shape)
+
+    return equalized_image
+
+
+def save_crop_digital_model(path_int_cr_tif, pid, raster_type, label, out_image, out_meta, path_int_cr_imgs):
+    with rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif", "w", **out_meta) as dst:
+        dst.write(out_image)
+    
+    # Normalize and convert to RGB
+    equalized_img = equalize_histogram(out_image[0])
+    # resized_img = cv2.resize(equalized_img, (89, 89))
+    resized_img = crop_image(equalized_img, (87, 87))
+    # Save as PNG
+    logger.info(f'Padded image shape: {resized_img.shape}')
+    save_as_png(resized_img, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
+    return resized_img
+
+
+def save_crop_chm(dsm, dtm, pid, raster_type, label, path_int_cr_imgs):
+    ndsm = dsm - dtm
+    save_as_png(ndsm, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
+
+
+def crop_buffer(raster, polygon):
     geojson_polygon = mapping(polygon)
     out_image, out_transform = mask(raster, [geojson_polygon], crop=True)
     out_meta = raster.meta.copy()
     out_meta.update({"height": out_image.shape[1], "width": out_image.shape[2], "transform": out_transform})
-    save_cropped_tifs(path_pri, pid, raster_type, label, out_image, out_meta, rgb, path_int_cr_imgs)
+    return out_image, out_meta
 
 @utils.timer
 def create_cropped_data(clipped_gdf, conf,
-                     rgb, ms_aligned, chm):
+                     rgb, ms_aligned, dsm_aligned, dtm_aligned):
     gdf_copy = process_shp(clipped_gdf, buffer=conf.preprocess.crop_buffer)
     for _, row in gdf_copy.iterrows():
-        crop_buffer(rgb, row.buffer, conf.data.path_int_cr_tif, row.pid, 'rgb', row.Species, rgb=True, path_int_cr_imgs=conf.data.path_int_cr_img)
-        crop_buffer(ms_aligned, row.buffer, conf.data.path_int_cr_tif, row.pid, 'hyps', row.Species)
-        crop_buffer(chm, row.buffer, conf.data.path_int_cr_tif, row.pid, 'chm', row.Species)
+        rgb_img, rgb_img_meta = crop_buffer(rgb, row.buffer)
+        save_crop_rgb(conf.data.path_int_cr_tif, row.pid, 'rgb', row.Species, rgb_img, rgb_img_meta, conf.data.path_int_cr_img)
+        hyps_img, hyps_img_meta = crop_buffer(ms_aligned, row.buffer)
+        save_crop(conf.data.path_int_cr_tif, row.pid, 'hyps', row.Species, hyps_img, hyps_img_meta)
+        dsm_img, dsm_img_meta = crop_buffer(dsm_aligned, row.buffer)
+        resized_dsm = save_crop_digital_model(conf.data.path_int_cr_tif, row.pid, 'dsm', row.Species, dsm_img, dsm_img_meta, conf.data.path_int_cr_img)
+        dtm_img, dtm_img_meta = crop_buffer(dtm_aligned, row.buffer)
+        resized_dtm = save_crop_digital_model(conf.data.path_int_cr_tif, row.pid, 'dtm', row.Species, dtm_img, dtm_img_meta, conf.data.path_int_cr_img)
+        save_crop_chm(resized_dsm, resized_dtm, row.pid, 'chm', row.Species, conf.data.path_int_cr_img)
 
 
-def create_canopy_height_model(name, path_int, dsm, dtm):
-    dsm_data = dsm.read(1)
-    dtm_data = dtm.read(1)
-    chm_data = dsm_data - dtm_data
-    with rasterio.open(f'{path_int}{name}.tif', 'w', **dsm.profile) as dst:
-        dst.write(chm_data, 1)
+# def create_canopy_height_model(name, path_int, dsm, dtm):
+#     dsm_data = dsm.read(1)
+#     dtm_data = dtm.read(1)
+#     chm_data = dsm_data - dtm_data
+#     with rasterio.open(f'{path_int}{name}.tif', 'w', **dsm.profile) as dst:
+#         dst.write(chm_data, 1)
     
-    chm = rasterio.open(f'{path_int}{name}.tif')
-    return chm
+#     chm = rasterio.open(f'{path_int}{name}.tif')
+#     return chm
 
 def normalize_image(image: np.ndarray) -> np.ndarray:
     """
@@ -197,10 +286,11 @@ def normalize_image(image: np.ndarray) -> np.ndarray:
     Returns:
     - numpy.ndarray: The normalized image.
     """
-    normalized_image = cv2.normalize(image, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    logger.info(f'Normalized image shape: {normalized_image.shape}')
-    return normalized_image
-
+    # Normalize the image to the range [0, 255]
+    # normalized_image = cv2.normalize(image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    # return normalized_image
+    normalized_image = ((image - np.min(image)) / (np.max(image) - np.min(image))) * 255
+    return normalized_image.astype(np.uint8)
 
 def convert_to_rgb(rgba_aligned):
     # Read the raster bands directly into numpy arrays.
@@ -209,6 +299,21 @@ def convert_to_rgb(rgba_aligned):
     rgb_data_hwc = np.transpose(rgb_data, (1, 2, 0))
     return rgb_data_hwc
 
+
+# def pad_image(image, target_size):
+#     """Pad an image array to a target size with zeros (black).
+    
+#     Args:
+#         image (np.array): The input image as a NumPy array.
+#         target_size (tuple): The target size as a tuple, (width, height).
+    
+#     Returns:
+#         np.array: The padded image as a NumPy array.
+#     """
+#     padded_image = np.zeros((target_size[1], target_size[0], image.shape[2]), dtype=image.dtype)
+#     padded_image[:image.shape[0], :image.shape[1]] = image
+#     logger.info(f'Padded image shape: {padded_image.shape}')
+#     return padded_image
 
 @utils.timer
 def main():
@@ -238,10 +343,10 @@ def main():
     plot_raster(clipped_gdf, dtm_aligned, 
                 out_dir=conf.data.path_rep, fn=conf.data.fn_dtm, show=False, save=True)
 
-    chm = create_canopy_height_model('chm', conf.data.path_int_al, dsm_aligned, dtm_aligned)
+    # chm = create_canopy_height_model('chm', conf.data.path_int_al, dsm_aligned, dtm_aligned)
 
     create_cropped_data(clipped_gdf, conf,
-                     rgba_clipped, hyps_aligned, chm)
+                     rgba_clipped, hyps_aligned, dsm_aligned, dtm_aligned)
 
 
 if __name__ == "__main__":
