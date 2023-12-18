@@ -316,7 +316,7 @@ def process_images(rgb_fns, chm_fns, hyps_fns):
         label = extract_label_from_filename(rgb_fn)
 
         # Create a DataFrame for the current image
-        columns = ['Label'] + [f'f_{i}_{feature_type}' for feature_type, feature_set in [('rgb', rgb_features), ('hyps', hyps_features), ('chm', chm_features)] for i in range(len(feature_set))]
+        columns = ['label'] + [f'f_{i}_{feature_type}' for feature_type, feature_set in [('rgb', rgb_features), ('hyps', hyps_features), ('chm', chm_features)] for i in range(len(feature_set))]
         image_data = [label] + combined_features.tolist()
         image_df = pd.DataFrame([image_data], columns=columns)
 

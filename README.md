@@ -32,10 +32,10 @@ Purpose:
 
 *** 
 To explore the models - I will use a jupyter notebook instead of scripts so that I can experiment.
+Refer to `modelling-{num}.ipynb` under `notebooks` dir.
 *** 
 
 6. Train model
 `python train.py`
 
 Purpose: This script trains the final model on the dataset provided and runs an evaluation on the test set.
-
