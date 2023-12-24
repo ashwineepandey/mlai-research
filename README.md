@@ -1,11 +1,51 @@
 # Classification of Invasive Species
 
 
-# Code
 
-## Pre-process shape files
+## Config
 
-### Purpose
+This configuration file (`base.conf`) is used to specify various parameters and file names required for the preprocessing and analysis of shapefiles and raster data.
+
+### Structure
+
+The file is divided into two main sections: `files` and `preprocess`.
+
+#### `files` Section
+
+This section defines the names of various input and output files used in the data processing pipeline.
+
+- `fn_shp_raw1`: The name of the first raw shapefile to be processed.
+- `fn_shp_raw2`: The name of the second raw shapefile to be processed.
+- `fn_shp_combined`: The name of the output shapefile that will be created by combining `fn_shp_raw1` and `fn_shp_raw2`.
+- `fn_feat`: The name of the output file where extracted features will be saved.
+- `fn_train`: The name of the output file where the training dataset will be saved.
+- `fn_test`: The name of the output file where the test dataset will be saved.
+- `fn_val`: The name of the output file where the validation dataset will be saved.
+
+#### `preprocess` Section
+
+This section defines parameters used during the preprocessing stage.
+
+- `crop_buffer`: The buffer size to use when cropping the data.
+
+
+
+## Code
+
+### Generate Random Points
+
+#### Purpose
+
+
+#### Usage
+
+To execute the script:
+`python gen_synthetic_points.py`
+
+
+### Pre-process shape files
+
+#### Purpose
 The primary objective of this script is to preprocess shapefiles containing point data for different species and create a combined shapefile with relevant information for further analysis. The preprocessing involves checking CRS consistency, selecting and renaming columns, dropping unnecessary dimensions from geometric data, and filtering species labels.
 
 #### Script Workflow
@@ -59,7 +99,7 @@ To execute the script:
 #### Outputs
 The script produces a combined shapefile (`fn_shp_combined`) containing the processed point data. The resulting shapefile is saved to the specified directory (`path_base_points`). Log messages provide information about the shape of loaded and combined GeoDataFrames, species value counts, and the saved shapefile path.
 
-## Pre-process rasters
+### Pre-process rasters
 
 ### Purpose
 The primary objective of this script is to handle various raster data types (multispectral images, normal camera images, digital surface models, and digital terrain models) and shapefiles. The script facilitates the preprocessing of these data types to prepare them for further analysis (species identification).
@@ -121,10 +161,10 @@ The primary objective of this script is to handle various raster data types (mul
 
 `python preprocess_rasters.py`
 
-## Segment cropped rasters
+### Segment cropped rasters
 
 ### Purpose
-This script is designed to handle various image types (RGB, grayscale, and hyperspectral) for agricultural research. It performs image segmentation and masking, and then saves and plots the results.
+This script is designed to handle various image types (RGB, grayscale, and hyperspectral). It performs image segmentation and masking, and then saves and plots the results.
 
 #### Script Workflow
 
@@ -196,7 +236,7 @@ This script is designed to handle various image types (RGB, grayscale, and hyper
 ### Usage
 `python segment.py`
 
-## Extract Features
+### Extract Features
 `python extract_features.py`
 
 Purpose: This script is used to extract features from the segmented images. It includes calculating various features for each segment and saving the features to a file.

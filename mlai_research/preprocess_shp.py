@@ -44,11 +44,11 @@ def process_shp_files(gdf1, gdf2):
 
 def filter_relevant_species(df):
     # logger.info(f"Species value counts (original label): {df['Species'].value_counts()}")
-    species_map = {"Xanthium strumarium" : "Xanthium",
-              "Datura stramonium": "Datura",
-               "Xanthium": "Xanthium",
-               "Datura": "Datura"}
-    df['Species'] = df['Species'].map(species_map).fillna('Other')
+    species_map = {"Xanthium strumarium" : "xan",
+              "Datura stramonium": "dat",
+               "Xanthium": "xan",
+               "Datura": "dat"}
+    df['Species'] = df['Species'].map(species_map).fillna('other')
     logger.info(f'Filtered Species value counts: {df.Species.value_counts()}')
     return df
 
