@@ -121,10 +121,10 @@ def plot_raster(gdf, rasterimg, raster_type, out_dir=None, fn=None, show=False):
     fig, ax = plt.subplots(figsize = (20,20))
     
     if raster_type == 'rgba':
-        cmap = "Viridis"
+        cmap = "viridis"
     else:
         cmap = "terrain"
-
+    rasterio.plot.show(rasterimg, ax=ax, cmap=cmap)
     gdf.plot(column='Species',
                    categorical=True,
                    legend=True,
@@ -137,6 +137,7 @@ def plot_raster(gdf, rasterimg, raster_type, out_dir=None, fn=None, show=False):
     if show == True:
         rasterio.plot.show(rasterimg, ax=ax, cmap=cmap)
     else:
+        # rasterio.plot.show(rasterimg, ax=ax, cmap=cmap)
         utils.save_plot(fig, f"{out_dir}preprocessed_{fn}.png")
         logger.info(f"Saved plot to {out_dir}preprocessed_{fn}.png")
 
@@ -188,7 +189,6 @@ def crop_buffer(raster: DatasetReader, polygon: Polygon, target_size=(87, 87)) -
     out_meta = raster.meta.copy()
     out_meta.update({"height": out_image.shape[1], "width": out_image.shape[2], "transform": out_transform})
     
-    logger.info(f'Cropped image shape: {out_image.shape}')
     return out_image, out_meta
 
 @utils.timer

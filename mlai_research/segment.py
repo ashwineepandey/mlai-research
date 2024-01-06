@@ -17,63 +17,63 @@ from typing import Tuple, Union, List, Dict
 
 logger = log.get_logger(__name__)
 
-def load_rgb_images(image_paths: List[str]) -> List[np.ndarray]:
-    """
-    Load RGB images from the provided paths.
+# def load_rgb_images(image_paths: List[str]) -> List[np.ndarray]:
+#     """
+#     Load RGB images from the provided paths.
 
-    Parameters:
-    - image_paths (List[str]): List of paths to the images.
+#     Parameters:
+#     - image_paths (List[str]): List of paths to the images.
 
-    Returns:
-    - List[np.ndarray]: List of loaded images.
-    """
-    images = []
-    for path in image_paths:
-        with rasterio.open(path) as src:
-            img = src.read()
-            image_data = np.transpose(img, (1, 2, 0))
-            rgb = image_data[:, :, :3]
-        images.append(rgb)
-    logger.info(f'Loaded RGB img shape: {images[0].shape}')
-    return images
+#     Returns:
+#     - List[np.ndarray]: List of loaded images.
+#     """
+#     images = []
+#     for path in image_paths:
+#         with rasterio.open(path) as src:
+#             img = src.read()
+#             image_data = np.transpose(img, (1, 2, 0))
+#             rgb = image_data[:, :, :3]
+#         images.append(rgb)
+#     logger.info(f'Loaded RGB img shape: {images[0].shape}')
+#     return images
 
-def load_grayscale_images(image_paths: List[str]) -> List[np.ndarray]:
-    """
-    Load grayscale images from the provided paths.
+# def load_grayscale_images(image_paths: List[str]) -> List[np.ndarray]:
+#     """
+#     Load grayscale images from the provided paths.
 
-    Parameters:
-    - image_paths (List[str]): List of paths to the images.
+#     Parameters:
+#     - image_paths (List[str]): List of paths to the images.
 
-    Returns:
-    - List[np.ndarray]: List of loaded images.
-    """
-    images = []
-    for path in image_paths:
-        img = np.load(path)
-        image_data = np.transpose(img, (1, 2, 0))
-        images.append(image_data)
-    logger.info(f'Loaded GRAY img shape: {images[0].shape}')
-    return images
+#     Returns:
+#     - List[np.ndarray]: List of loaded images.
+#     """
+#     images = []
+#     for path in image_paths:
+#         img = np.load(path)
+#         image_data = np.transpose(img, (1, 2, 0))
+#         images.append(image_data)
+#     logger.info(f'Loaded GRAY img shape: {images[0].shape}')
+#     return images
 
-def load_hyperspectral_images(image_paths: List[str]) -> List[np.ndarray]:
-    """
-    Load hyperspectral images from the provided paths.
+# def load_hyperspectral_images(image_paths: List[str]) -> List[np.ndarray]:
+#     """
+#     Load hyperspectral images from the provided paths.
 
-    Parameters:
-    - image_paths (List[str]): List of paths to the images.
+#     Parameters:
+#     - image_paths (List[str]): List of paths to the images.
 
-    Returns:
-    - List[np.ndarray]: List of loaded images.
-    """
-    images = []
-    for path in image_paths:
-        with rasterio.open(path) as src:
-            img = src.read()
-        # Transpose the image to have channels last
-        img = img.transpose((1, 2, 0))
-        images.append(img)
-    logger.info(f'Loaded HYPS img shape: {images[0].shape}')
-    return images
+#     Returns:
+#     - List[np.ndarray]: List of loaded images.
+#     """
+#     images = []
+#     for path in image_paths:
+#         with rasterio.open(path) as src:
+#             img = src.read()
+#         # Transpose the image to have channels last
+#         img = img.transpose((1, 2, 0))
+#         images.append(img)
+#     logger.info(f'Loaded HYPS img shape: {images[0].shape}')
+#     return images
 
 def normalize_image(image: np.ndarray) -> np.ndarray:
     """
@@ -135,7 +135,7 @@ def create_plant_mask(image: np.ndarray, segments: np.ndarray) -> np.ndarray:
         green_proportion = np.mean(green_mask[segment])
 
         # If the segment is mostly green, add it to the plant mask
-        if green_proportion > 0.7:
+        if green_proportion > 0.55:
             plant_mask = plant_mask | segment
     
     return plant_mask.astype(np.uint8) * 255
@@ -388,9 +388,9 @@ def main():
     chm_fns = sorted(chm_fns)
     hyps_fns = sorted(hyps_fns)
 
-    rgb_imgs = load_rgb_images(rgb_fns)
-    chm_imgs = load_grayscale_images(chm_fns)
-    hyps_imgs = load_hyperspectral_images(hyps_fns)
+    rgb_imgs = utils.load_rgb_rasters(rgb_fns)
+    chm_imgs = utils.load_grayscale_arrays(chm_fns)
+    hyps_imgs = utils.load_hyperspectral_rasters(hyps_fns)
 
     rgb_dct, masks = segment_rgb(rgb_imgs)
     chm_dct = segment_grayscale(chm_imgs, masks)

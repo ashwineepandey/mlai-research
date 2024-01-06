@@ -16,40 +16,55 @@ import pandas as pd
 
 logger = log.get_logger(__name__)
 
-def load_rgb_images(image_paths):
-    images = []
-    for path in image_paths:
-        img = cv2.imread(path)
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB
-        images.append(img_rgb)
-    return np.array(images)
+# def load_rgb_images(image_paths):
+#     images = []
+#     for path in image_paths:
+#         img = cv2.imread(path)
+#         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert to RGB
+#         images.append(img_rgb)
+#     return np.array(images)
 
 
-def load_grayscale_images(image_paths):
-    images = []
-    for path in image_paths:
-        img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-        images.append(img)
-    return np.array(images)
+def normalize_features(features: np.ndarray) -> np.ndarray:
+    """
+    Normalize the input feature array.
+
+    Parameters:
+    - features (np.ndarray): Input feature array.
+
+    Returns:
+    - np.ndarray: Normalized feature array.
+    """
+    return (features - features.min()) / (features.max() - features.min())
+
+# @utils.timer
+# def load_grayscale_images(image_paths):
+#     images = []
+#     for path in image_paths:
+#         img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+#         images.append(img)
+#     return np.array(images)
+
+# @utils.timer
+# def load_hyperspectral_images(image_paths):
+#     images = []
+#     for path in image_paths:
+#         with rasterio.open(path) as src:
+#             img = src.read()
+#             # Transpose the image to have channels last
+#             img = img.transpose((1, 2, 0))
+#             images.append(img)
+#     return images
 
 
-def load_hyperspectral_images(image_paths):
-    images = []
-    for path in image_paths:
-        with rasterio.open(path) as src:
-            img = src.read()
-            # Transpose the image to have channels last
-            img = img.transpose((1, 2, 0))
-            images.append(img)
-    return images
+def plot_cropped_images(images: list[np.ndarray], titles: list[str], ncols: int = 3) -> None:
+    """
+    Plot a list of loaded images.
 
-def plot_cropped_images(images, titles, ncols=3):
-    """Plot a list of loaded images.
-    
-    Args:
-        images (list): List of loaded images.
-        titles (list): List of titles for the images.
-        ncols (int): Number of columns for the subplot grid.
+    Parameters:
+    - images (list[np.ndarray]): List of loaded images.
+    - titles (list[str]): List of titles for the images.
+    - ncols (int): Number of columns for the subplot grid.
     """
     nrows = len(images) // ncols + (len(images) % ncols > 0) # calculate number of rows
 
@@ -87,7 +102,8 @@ def extract_color_histogram(image: np.ndarray, bins: int = 32) -> np.ndarray:
     hist_features = np.concatenate([rhist, ghist, bhist])
 
     # Normalize the histogram
-    cv2.normalize(hist_features, hist_features)
+    # cv2.normalize(hist_features, hist_features)
+    hist_features = normalize_features(hist_features)
     logger.info(f'Color histogram shape: {hist_features.shape}')
     return hist_features
 
@@ -122,7 +138,8 @@ def extract_texture_features(image: np.ndarray) -> np.ndarray:
     texture_features = np.concatenate([contrast, dissimilarity, homogeneity, energy, correlation])
     
     # Normalize the texture features
-    cv2.normalize(texture_features, texture_features)
+    # cv2.normalize(texture_features, texture_features)
+    texture_features = normalize_features(texture_features)
     logger.info(f'Texture features shape: {texture_features.shape}')
     return texture_features
 
@@ -161,8 +178,8 @@ def extract_shape_features(image: np.ndarray, max_descriptors=10) -> np.ndarray:
         descriptors = descriptors[:max_descriptors, :]
 
     # Normalize the descriptors
-    cv2.normalize(descriptors, descriptors)
-
+    # cv2.normalize(descriptors, descriptors)
+    descriptors = normalize_features(descriptors)
     logger.info(f'Shape features shape: {descriptors.shape}')
     return descriptors
 
@@ -198,13 +215,22 @@ def extract_geometric_features(rgb_image):
     # Combine features into a NumPy array
     geometric_features = np.array([area, perimeter, eccentricity, extent, aspect_ratio, roundness, compactness])
 
-    cv2.normalize(geometric_features, geometric_features)
-
+    # cv2.normalize(geometric_features, geometric_features)
+    geometric_features = normalize_features(geometric_features)
     logger.info(f'Geometric features shape: {geometric_features.shape}')
     return geometric_features
 
 
-def preprocess_input(x):
+def preprocess_input(x: np.ndarray) -> np.ndarray:
+    """
+    Preprocess the input image array for ResNet.
+
+    Parameters:
+    x (np.ndarray): The input image array.
+
+    Returns:
+    np.ndarray: Preprocessed image array.
+    """
     x = x.astype(np.float64)  # Convert the image to float64
     mean = [0.485, 0.456, 0.406]
     std = [0.229, 0.224, 0.225]
@@ -212,7 +238,17 @@ def preprocess_input(x):
     x = (x - mean) / std
     return x
 
-def extract_resnet_features(img_data):
+
+def extract_resnet_features(img_data: np.ndarray) -> np.ndarray:
+    """
+    Extract features using a pre-trained ResNet50 model.
+
+    Parameters:
+    img_data (np.ndarray): The image data.
+
+    Returns:
+    np.ndarray: Extracted features.
+    """
     # Load the pre-trained ResNet50 model
     base_model = models.resnet50(pretrained=True)
     
@@ -241,8 +277,17 @@ def extract_resnet_features(img_data):
     
     return res_feature
 
+@utils.timer
+def get_rgb_features(rgb_image: np.ndarray) -> np.ndarray:
+    """
+    Extract and combine various features from an RGB image.
 
-def get_rgb_features(rgb_image):
+    Parameters:
+    rgb_image (np.ndarray): The RGB image.
+
+    Returns:
+    np.ndarray: Combined feature vector.
+    """
     # Extract individual feature sets
     color_histogram = extract_color_histogram(rgb_image)
     texture_features = extract_texture_features(rgb_image)
@@ -251,93 +296,153 @@ def get_rgb_features(rgb_image):
 
     # Concatenate features into a single feature vector
     rgb_features = np.concatenate([color_histogram.flatten(), texture_features.flatten(), shape_features.flatten(), geometric_features.flatten()])
-
-    # # Normalize the combined feature vector if necessary
-    # combined_features = (combined_features - np.min(combined_features)) / (np.max(combined_features) - np.min(combined_features))
+    # Normalize the feature vector
+    rgb_features = normalize_features(rgb_features)
     logger.info(f'RGB features shape: {rgb_features.shape}')
     return rgb_features
 
 
-def get_chm_features(chm_data):
-    # Calculate basic statistics on the CHM data
+def get_chm_features(chm_data: np.ndarray) -> np.ndarray:
+    """
+    Calculate basic statistical features from Canopy Height Model (CHM) data.
+
+    Args:
+        chm_data (np.ndarray): The CHM data as a NumPy array.
+
+    Returns:
+        np.ndarray: A NumPy array containing calculated features including mean height, 
+                    maximum height, minimum height, and height range.
+    """
     mean_height = np.mean(chm_data)
     max_height = np.max(chm_data)
     min_height = np.min(chm_data)
     height_range = max_height - min_height
 
-    # Concatenate all features into a single vector
     chm_features = np.array([mean_height, max_height, min_height, height_range])
+    chm_features = normalize_features(chm_features)
     logger.info(f'CHM features shape: {chm_features.shape}')
     return chm_features
 
 
-def get_hyperspectral_features(hyperspectral_data):
-    # Calculate mean and standard deviation for each spectral band
+def get_hyperspectral_features(hyperspectral_data: np.ndarray) -> np.ndarray:
+    """
+    Calculate mean and standard deviation for each spectral band in hyperspectral data.
+
+    Args:
+        hyperspectral_data (np.ndarray): The hyperspectral data as a NumPy array.
+
+    Returns:
+        np.ndarray: A NumPy array of concatenated mean and standard deviation values 
+                    for each spectral band.
+    """
     mean_spectrum = np.mean(hyperspectral_data, axis=(1, 2))
     std_spectrum = np.std(hyperspectral_data, axis=(1, 2))
 
-    # Concatenate all features into a single vector
     hyperspectral_features = np.concatenate((mean_spectrum, std_spectrum))
+    hyperspectral_features = normalize_features(hyperspectral_features)
     logger.info(f'Hyperspectral features shape: {hyperspectral_features.shape}')
     return hyperspectral_features
 
 
-def combine_features(rgb_features, hyperspectral_features, chm_features):
-    # Combine features from all three sources into a single feature vector
+def combine_features(rgb_features: np.ndarray, hyperspectral_features: np.ndarray, chm_features: np.ndarray) -> np.ndarray:
+    """
+    Combine features from RGB, hyperspectral, and CHM data sources into a single feature vector.
+
+    Args:
+        rgb_features (np.ndarray): The features extracted from RGB data.
+        hyperspectral_features (np.ndarray): The features extracted from hyperspectral data.
+        chm_features (np.ndarray): The features extracted from CHM data.
+
+    Returns:
+        np.ndarray: A normalized combined feature vector.
+    """
     combined_features = np.concatenate((rgb_features, hyperspectral_features, chm_features), axis=0)
+    # norm_combined_features = normalize_features(combined_features)
     logger.info(f'Combined features shape: {combined_features.shape}')
     return combined_features
 
 
-def extract_label_from_filename(filename):
-    # Extract the label from the filename
-    label = filename.split('_')[-2]
-    return label
+def extract_label_from_filename(filename: str) -> str:
+    """
+    Extract the label from the filename.
+
+    Args:
+        filename (str): The filename from which to extract the label.
+
+    Returns:
+        str: The extracted label.
+    """
+    # Extract the base filename from the path
+    base_filename = os.path.basename(filename)
+    # Split the base filename by underscore and extract the first part
+    return base_filename.split('_')[2]
+
+
+def extract_pid_from_filename(filename: str) -> str:
+    """
+    Extract the photo ID from the filename.
+
+    Args:
+        filename (str): The filename from which to extract the photo ID.
+
+    Returns:
+        str: The extracted photo ID.
+    """
+    # Extract the base filename from the path
+    base_filename = os.path.basename(filename)
+    # Split the base filename by underscore and extract the first part
+    return base_filename.split('_')[0]
+
+
 @utils.timer
-def process_images(rgb_fns, chm_fns, hyps_fns):
+def process_images(rgb_fns: list[str], chm_fns: list[str], hyps_fns: list[str]) -> pd.DataFrame:
+    """
+    Process a set of image files to extract and combine features for analysis.
+
+    Args:
+        rgb_fns (list[str]): List of filenames for RGB images.
+        chm_fns (list[str]): List of filenames for CHM images.
+        hyps_fns (list[str]): List of filenames for hyperspectral images.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing combined features, labels, and plot IDs for each image.
+    """
     data = []
-    # Iterate over all the image files
     for rgb_fn, chm_fn, hyps_fn in zip(rgb_fns, chm_fns, hyps_fns):
         logger.info(f'Processing {rgb_fn}...')
-        # Load the images
-        rgb_img = load_rgb_images([rgb_fn])[0]
-        chm_img = load_grayscale_images([chm_fn])[0]
-        hyps_img = load_hyperspectral_images([hyps_fn])[0]
-
-        # Extract features
-        rgb_features = get_rgb_features(rgb_img)
-        chm_features = get_chm_features(chm_img)
-        hyps_features = get_hyperspectral_features(hyps_img)
-
-        # Combine features
-        combined_features = np.concatenate((rgb_features, hyps_features, chm_features), axis=0)
-
-        # Extract label from filename
         label = extract_label_from_filename(rgb_fn)
-
-        # Create a DataFrame for the current image
-        columns = ['label'] + [f'f_{i}_{feature_type}' for feature_type, feature_set in [('rgb', rgb_features), ('hyps', hyps_features), ('chm', chm_features)] for i in range(len(feature_set))]
-        image_data = [label] + combined_features.tolist()
-        image_df = pd.DataFrame([image_data], columns=columns)
-
-        # Append the DataFrame to the main data list
-        data.append(image_df)
-
-    # Concatenate all DataFrames into a single DataFrame
+        pid = extract_pid_from_filename(rgb_fn)
+        rgb_img = utils.load_rgb_images([rgb_fn])[0]
+        if ((label == 'unk') & (utils.calculate_zero_pixel_percentage(rgb_img) < 95)) | ((label != 'unk') & (utils.calculate_zero_pixel_percentage(rgb_img) < 99)):
+            chm_img = utils.load_grayscale_arrays([chm_fn])[0]
+            hyps_img = utils.load_hyperspectral_rasters([hyps_fn])[0]
+            rgb_features = get_rgb_features(rgb_img)
+            chm_features = get_chm_features(chm_img)
+            hyps_features = get_hyperspectral_features(hyps_img)
+            norm_combined_features = combine_features(rgb_features, hyps_features, chm_features)
+            columns = ['pid', 'label'] + [f'f_{i}_{feature_type}' for feature_type, feature_set in [('rgb', rgb_features), ('hyps', hyps_features), ('chm', chm_features)] for i in range(len(feature_set))]
+            image_data = [pid, label] + norm_combined_features.tolist()
+            image_df = pd.DataFrame([image_data], columns=columns)
+            data.append(image_df)
+        else:
+            pass
     df = pd.concat(data, ignore_index=True)
-
+    logger.info(f'Final dataframe shape: {df.shape}')
+    logger.info(f'Label counts:\n{df.label.value_counts()}')
     return df
 
 
+@utils.timer
 def main():
     conf = utils.load_config('base')
     rgb_fns = utils.get_filenames(conf.data.path_pri, "png", 'rgb')
-    chm_fns = utils.get_filenames(conf.data.path_pri, "png", 'chm')
+    chm_fns = utils.get_filenames(conf.data.path_pri, "npy", 'chm')
     hyps_fns = utils.get_filenames(conf.data.path_pri, "tif", 'hyps')
     rgb_fns = sorted(rgb_fns)
     chm_fns = sorted(chm_fns)
     hyps_fns = sorted(hyps_fns)
     df = process_images(rgb_fns, chm_fns, hyps_fns)
+    df = df.fillna(0.)
     df.to_csv(f"{conf.data.path_feat}{conf.data.fn_feat}", index=False)
 
 

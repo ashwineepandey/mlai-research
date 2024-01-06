@@ -1,15 +1,15 @@
-
-
 import log
 import os
 import functools
 import time
 import glob
+import cv2
 from pyhocon import ConfigFactory
 from typing import Dict, List, Tuple
 from datetime import datetime
 import rasterio
 import matplotlib.pyplot as plt
+import numpy as np
 
 logger = log.get_logger(__name__)
 
@@ -52,12 +52,22 @@ def load_raster(path):
     return img
 
 
-def get_filenames(path, ext, keyword=None):
+# def get_filenames(path, ext, keyword=None):
+#     pattern = f'{path}*.{ext}'
+#     file_paths = glob.glob(pattern)
+    
+#     if keyword:
+#         filtered_paths = [file_path for file_path in file_paths if keyword in file_path]
+#         return filtered_paths
+#     else:
+#         return file_paths
+
+def get_filenames(path, ext, keywords=None):
     pattern = f'{path}*.{ext}'
     file_paths = glob.glob(pattern)
     
-    if keyword:
-        filtered_paths = [file_path for file_path in file_paths if keyword in file_path]
+    if keywords:
+        filtered_paths = [file_path for file_path in file_paths if any(keyword in file_path for keyword in keywords)]
         return filtered_paths
     else:
         return file_paths
@@ -86,3 +96,107 @@ def sync_crs(gdf, rasterimg) -> bool:
     if gdf.crs != rasterimg.crs:
         gdf = gdf.set_crs(str(rasterimg.crs))
     return gdf
+
+
+def load_rgb_images(image_paths):
+    """
+    Load RGB images from the provided paths.
+
+    Parameters:
+    - image_paths (List[str]): List of paths to the images.
+
+    Returns:
+    - List[np.ndarray]: List of loaded images.
+    """
+    images = []
+    for path in image_paths:
+        img = cv2.imread(path)
+        images.append(img)
+    logger.info(f'Loaded RGB img shape: {images[0].shape}')
+    return images
+
+
+def load_rgb_rasters(image_paths: List[str]) -> List[np.ndarray]:
+    """
+    Load RGBA rasters from the provided paths.
+
+    Parameters:
+    - image_paths (List[str]): List of paths to the rasters.
+
+    Returns:
+    - List[np.ndarray]: List of loaded rasters.
+    """
+    images = []
+    for path in image_paths:
+        with rasterio.open(path) as src:
+            img = src.read()
+            image_data = np.transpose(img, (1, 2, 0))
+            rgb = image_data[:, :, :3]
+        images.append(rgb)
+    logger.info(f'Loaded RGB img shape: {images[0].shape}')
+    return images
+
+def load_grayscale_arrays(image_paths: List[str]) -> List[np.ndarray]:
+    """
+    Load grayscale images from the provided paths.
+
+    Parameters:
+    - image_paths (List[str]): List of paths to the images.
+
+    Returns:
+    - List[np.ndarray]: List of loaded images.
+    """
+    images = []
+    for path in image_paths:
+        img = np.load(path)
+        image_data = np.transpose(img, (1, 2, 0))
+        images.append(image_data)
+    logger.info(f'Loaded GRAY img shape: {images[0].shape}')
+    return images
+
+def load_hyperspectral_rasters(image_paths: List[str]) -> List[np.ndarray]:
+    """
+    Load hyperspectral images from the provided paths.
+
+    Parameters:
+    - image_paths (List[str]): List of paths to the images.
+
+    Returns:
+    - List[np.ndarray]: List of loaded images.
+    """
+    images = []
+    for path in image_paths:
+        with rasterio.open(path) as src:
+            img = src.read()
+        # Transpose the image to have channels last
+        img = img.transpose((1, 2, 0))
+        images.append(img)
+    logger.info(f'Loaded HYPS img shape: {images[0].shape}')
+    return images
+
+
+def calculate_zero_pixel_percentage(rgb_image: np.ndarray) -> float:
+    """
+    Calculate the percentage of zero-value pixels in an RGB image.
+
+    Args:
+        rgb_image (np.ndarray): The input RGB image as a NumPy array with shape (height, width, 3).
+
+    Returns:
+        float: The percentage of pixels in the image that are completely black (0, 0, 0).
+    """
+    # Check if the image is empty or not an RGB image
+    if rgb_image.size == 0 or len(rgb_image.shape) != 3 or rgb_image.shape[2] != 3:
+        raise ValueError("Input is not a valid RGB image.")
+
+    # Count the number of zero-value pixels
+    zero_pixels = np.all(rgb_image == 0, axis=2)
+    num_zero_pixels = np.count_nonzero(zero_pixels)
+
+    # Calculate the total number of pixels
+    total_pixels = rgb_image.shape[0] * rgb_image.shape[1]
+
+    # Calculate the percentage of zero-value pixels
+    zero_pixel_percentage = (num_zero_pixels / total_pixels) * 100
+
+    return zero_pixel_percentage
