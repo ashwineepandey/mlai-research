@@ -236,22 +236,6 @@ def create_canopy_height_model(name: str, path_int: str, dsm: DatasetReader, dtm
     chm = rasterio.open(f'{path_int}{name}.tif')
     return chm
 
-def normalize_image(image: np.ndarray) -> np.ndarray:
-    """
-    Normalizes the pixel values of the input image.
-
-    Parameters:
-    - image (numpy.ndarray): The input image.
-
-    Returns:
-    - numpy.ndarray: The normalized image.
-    """
-    # Normalize the image to the range [0, 255]
-    # normalized_image = cv2.normalize(image, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-    # return normalized_image
-    normalized_image = ((image - np.min(image)) / (np.max(image) - np.min(image))) * 255
-    return normalized_image.astype(np.uint8)
-
 
 @utils.timer
 def main():
@@ -290,76 +274,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-    # def save_as_png(image: np.ndarray, filename: str):
-#     """
-#     Saves the input image as a PNG file.
-
-#     Parameters:
-#     - image (numpy.ndarray): The input image.
-#     - filename (str): The output filename.
-#     """
-#     im = Image.fromarray((image * 255).astype(np.uint8))
-#     im.save(filename)
-
-
-# def save_crop_rgb(path_int_cr_tif, pid, raster_type, label, out_image, out_meta, path_int_cr_imgs):
-#     resized_img = np.resize(out_image, (out_image.shape[0], 87, 87))
-
-#     # Update the metadata with the new dimensions
-#     out_meta.update({"height": 87, "width": 87})
-
-#     logger.info(f'Resized RGB image shape: {resized_img.shape}')
-    
-#     with rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif", "w", **out_meta) as dst:
-#         dst.write(out_image)
-    
-    # # Normalize and convert to RGB
-    # cropped_raster = rasterio.open(f"{path_int_cr_tif}{pid}_{raster_type}_{label}.tif")
-    # rgb_data_hwc = convert_to_rgb(cropped_raster)
-    # # normalized_image = normalize_image(rgb_data_hwc)
-    # resized_img = crop_image(rgb_data_hwc, (87, 87))
-    # # Save as PNG
-    # logger.info(f'Resized RGB image shape: {resized_img.shape}')
-    # save_as_png(resized_img, f"{path_int_cr_imgs}{pid}_{raster_type}_{label}.png")
-
-
-# def equalize_histogram(image: np.ndarray) -> np.ndarray:
-#     """
-#     Equalizes the histogram of the input image.
-
-#     Parameters:
-#     - image (numpy.ndarray): The input image.
-
-#     Returns:
-#     - numpy.ndarray: The image with equalized histogram.
-#     """
-#     # Normalize the image to 0-1 range
-#     # image_norm = (image - np.min(image)) / (np.max(image) - np.min(image))
-
-#     # # Convert the normalized image to 8-bit
-#     # image_8bit = np.uint8(image_norm * 255)
-
-#     image_8bit = normalize_image(image)
-
-#     # Flatten the image into 1D array
-#     image_flattened = image_8bit.flatten()
-
-#     # Perform histogram equalization
-#     equalized_image = cv2.equalizeHist(image_flattened)
-
-#     # Reshape the equalized image back to the original shape
-#     equalized_image = equalized_image.reshape(image.shape)
-
-#     return equalized_image
-
-
-
-# def convert_to_rgb(rgba_aligned):
-#     # Read the raster bands directly into numpy arrays.
-#     rgba_data = rgba_aligned.read()
-#     rgb_data = rgba_data[:3, :, :]
-#     rgb_data_hwc = np.transpose(rgb_data, (1, 2, 0))
-#     return rgb_data_hwc
